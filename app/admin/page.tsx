@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useSession, signOut } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Lock, Shield, LayoutDashboard, Users, Activity,
@@ -457,10 +458,9 @@ function RevenueTab({ data }: { data: AdminStats }) {
 // ─── Slide-over ───────────────────────────────────────────────────────────────
 
 function SlideOver({
-  user, secret, onClose, onSaved,
+  user, onClose, onSaved,
 }: {
   user: AdminStats["users"][0];
-  secret: string;
   onClose: () => void;
   onSaved: (updated: AdminStats["users"][0]) => void;
 }) {
@@ -475,7 +475,7 @@ function SlideOver({
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-secret": secret },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vapiAssistantId: vapiAssistantId.trim(), vapiPhoneNumberId: vapiPhoneNumberId.trim() }),
       });
       if (!res.ok) throw new Error("Save failed");
@@ -587,7 +587,7 @@ function SlideOver({
 
 // ─── Users Tab ────────────────────────────────────────────────────────────────
 
-function UsersTab({ users, secret }: { users: AdminStats["users"]; secret: string }) {
+function UsersTab({ users }: { users: AdminStats["users"] }) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AdminStats["users"][0] | null>(null);
 
@@ -645,7 +645,7 @@ function UsersTab({ users, secret }: { users: AdminStats["users"]; secret: strin
       {/* Slide-over */}
       <AnimatePresence>
         {selected && (
-          <SlideOver user={selected} secret={secret} onClose={() => setSelected(null)} onSaved={(updated) => setSelected(updated)} />
+          <SlideOver user={selected} onClose={() => setSelected(null)} onSaved={(updated) => setSelected(updated)} />
         )}
       </AnimatePresence>
     </motion.div>
@@ -816,7 +816,7 @@ const NAV: { label: string; id: Tab; icon: React.ElementType }[] = [
   { label: "Activity", id: "activity", icon: Activity },
 ];
 
-function AdminShell({ data, secret, onLock }: { data: AdminStats; secret: string; onLock: () => void }) {
+function AdminShell({ data, onLogout }: { data: AdminStats; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -825,12 +825,12 @@ function AdminShell({ data, secret, onLock }: { data: AdminStats; secret: string
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res = await fetch("/api/admin/stats", { headers: { "x-admin-secret": secret } });
+      const res = await fetch("/api/admin/stats");
       if (res.ok) setLiveData(await res.json());
     } finally {
       setRefreshing(false);
     }
-  }, [secret]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-zinc-950 flex">
@@ -860,9 +860,9 @@ function AdminShell({ data, secret, onLock }: { data: AdminStats; secret: string
             <RefreshCw className={`w-4 h-4 flex-shrink-0 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </button>
-          <button onClick={onLock} suppressHydrationWarning
+          <button onClick={onLogout} suppressHydrationWarning
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800 transition-all">
-            <LogOut className="w-4 h-4 flex-shrink-0" />Lock
+            <LogOut className="w-4 h-4 flex-shrink-0" />Sign Out
           </button>
         </div>
       </aside>
@@ -892,9 +892,9 @@ function AdminShell({ data, secret, onLock }: { data: AdminStats; secret: string
                 <Icon className="w-4 h-4" />{label}
               </button>
             ))}
-            <button onClick={onLock} suppressHydrationWarning
+            <button onClick={onLogout} suppressHydrationWarning
               className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-zinc-600 hover:bg-zinc-800 transition-all">
-              <LogOut className="w-4 h-4" />Lock
+              <LogOut className="w-4 h-4" />Sign Out
             </button>
           </motion.div>
         )}
@@ -907,7 +907,7 @@ function AdminShell({ data, secret, onLock }: { data: AdminStats; secret: string
             {tab === "overview" && <OverviewTab key="overview" data={liveData} />}
             {tab === "growth"   && <GrowthTab   key="growth"   data={liveData} />}
             {tab === "revenue"  && <RevenueTab  key="revenue"  data={liveData} />}
-            {tab === "users"    && <UsersTab     key="users"    users={liveData.users} secret={secret} />}
+            {tab === "users"    && <UsersTab     key="users"    users={liveData.users} />}
             {tab === "calls"    && <CallsTab     key="calls"    data={liveData} />}
             {tab === "activity" && <ActivityTab  key="activity" data={liveData} />}
           </AnimatePresence>
@@ -920,19 +920,60 @@ function AdminShell({ data, secret, onLock }: { data: AdminStats; secret: string
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
+  const { data: session, status } = useSession();
   const [adminData, setAdminData] = useState<AdminStats | null>(null);
-  const secretRef = useRef("");
+  const [authError, setAuthError] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleUnlock = useCallback((data: AdminStats, secret: string) => {
-    secretRef.current = secret;
-    setAdminData(data);
-  }, []);
+  useEffect(() => {
+    if (status === "loading") return;
+    if (!session?.user?.email) {
+      setLoading(false);
+      setAuthError(true);
+      return;
+    }
+    // Fetch admin data — server will verify if user is admin
+    fetch("/api/admin/stats")
+      .then((res) => {
+        if (res.status === 401) { setAuthError(true); setLoading(false); return null; }
+        return res.json();
+      })
+      .then((data) => { if (data) { setAdminData(data); setLoading(false); } })
+      .catch(() => { setAuthError(true); setLoading(false); });
+  }, [session, status]);
 
-  const handleLock = useCallback(() => {
-    secretRef.current = "";
-    setAdminData(null);
-  }, []);
+  if (loading || status === "loading") {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-zinc-500 text-sm">Loading...</div>
+      </div>
+    );
+  }
 
-  if (!adminData) return <LockScreen onUnlock={handleUnlock} />;
-  return <AdminShell data={adminData} secret={secretRef.current} onLock={handleLock} />;
+  if (authError || !adminData) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4 relative">
+        <div className="absolute inset-0 pointer-events-none opacity-[0.025]"
+          style={{ backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)", backgroundSize: "32px 32px" }} />
+        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="w-full max-w-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl text-center">
+            <div className="w-12 h-12 bg-zinc-800 border border-zinc-700 rounded-xl flex items-center justify-center mb-6 mx-auto">
+              <Lock className="w-5 h-5 text-zinc-400" />
+            </div>
+            <h1 className="text-white font-bold text-xl mb-2">Access Denied</h1>
+            <p className="text-zinc-500 text-sm mb-6">
+              {session?.user ? "Your account does not have admin access." : "Please sign in to access the admin panel."}
+            </p>
+            <a href={session?.user ? "/" : "/auth/login?callbackUrl=/admin"}
+              className="inline-block w-full py-3 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-semibold text-sm transition-colors">
+              {session?.user ? "Go Home" : "Sign In"}
+            </a>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return <AdminShell data={adminData} onLogout={() => signOut({ callbackUrl: "/auth/login" })} />;
 }

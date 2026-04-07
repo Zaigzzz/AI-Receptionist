@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { readUsers } from "@/lib/users";
+import { auth } from "@/auth";
 
 const VAPI_PRIVATE_KEY = process.env.VAPI_PRIVATE_KEY!;
-const ASSISTANT_ID     = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID!;
 
 export interface AdminCall {
   id: string; status: string; endedReason?: string;
@@ -29,10 +29,17 @@ export interface AdminStats {
   totalSeconds: number;
 }
 
-export async function GET(req: Request) {
-  const secret   = process.env.ADMIN_SECRET;
+async function isAdmin(req: Request): Promise<boolean> {
+  // Support both session auth and legacy header auth
+  const session = await auth();
+  if (session?.user?.email === process.env.FOUNDER_EMAIL) return true;
+  const secret = process.env.ADMIN_SECRET;
   const provided = req.headers.get("x-admin-secret");
-  if (!secret || provided !== secret) {
+  return !!(secret && provided === secret);
+}
+
+export async function GET(req: Request) {
+  if (!(await isAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

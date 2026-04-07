@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { updateUser, findById } from "@/lib/users";
+import { auth } from "@/auth";
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function isAdmin(req: Request): Promise<boolean> {
+  const session = await auth();
+  if (session?.user?.email === process.env.FOUNDER_EMAIL) return true;
   const secret = process.env.ADMIN_SECRET;
   const provided = req.headers.get("x-admin-secret");
+  return !!(secret && provided === secret);
+}
 
-  if (!secret || provided !== secret) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await isAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
