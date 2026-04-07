@@ -14,7 +14,7 @@ import type { AdminStats, AdminCall } from "@/app/api/admin/stats/route";
 
 type Tab = "overview" | "growth" | "revenue" | "users" | "calls" | "activity";
 
-const PLAN_PRICE = 300; // $ per user per month
+const PLAN_PRICE = 149; // $ per user per month
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

@@ -21,7 +21,7 @@ const STEPS = [
       "Head to our signup page, enter your business details, and choose the plan that fits. That's it — your account is live immediately.",
     details: [
       { icon: Check, text: "Business name, email, and password" },
-      { icon: Check, text: "Choose Starter ($300/mo) or Pro ($500 setup + $150/mo)" },
+      { icon: Check, text: "One simple plan — $149/mo, everything included" },
       { icon: Check, text: "Instant dashboard access — no waiting" },
     ],
     cta: { label: "Create Your Account", href: "/auth/signup" },

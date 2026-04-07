@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
           const founderEmail = process.env.FOUNDER_EMAIL;
           if (founderEmail && process.env.RESEND_API_KEY) {
-            const planLabel = plan === "pro" ? "Pro ($500 + $150/mo)" : "Starter ($300/mo)";
+            const planLabel = "ProAnswer ($149/mo)";
             await resend.emails.send({
               from:    "ProAnswer <noreply@proanswer.dev>",
               to:      founderEmail,

@@ -4,12 +4,7 @@ import { auth } from "@/auth";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-// Map plan IDs to Stripe Price IDs — set these in .env.local after creating
-// products in your Stripe dashboard (stripe.com/docs/products-prices)
-const PRICE_IDS: Record<string, string> = {
-  starter: process.env.STRIPE_PRICE_STARTER!,
-  pro:     process.env.STRIPE_PRICE_PRO!,
-};
+const PRICE_ID = process.env.STRIPE_PRICE_STARTER!;
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -17,11 +12,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { plan } = await req.json();
-  const priceId = PRICE_IDS[plan];
+  const { plan = "starter" } = await req.json();
 
-  if (!priceId) {
-    return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+  if (!PRICE_ID) {
+    return NextResponse.json({ error: "Stripe price not configured" }, { status: 500 });
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
@@ -33,15 +27,7 @@ export async function POST(req: Request) {
       mode: "subscription",
       customer_email: session.user.email ?? undefined,
       line_items: [
-        { price: priceId, quantity: 1 },
-        ...(plan === "pro" ? [{
-          price_data: {
-            currency: "usd",
-            product_data: { name: "ProAnswer Pro — One-time Setup Fee" },
-            unit_amount: 50000,
-          },
-          quantity: 1,
-        }] : []),
+        { price: PRICE_ID, quantity: 1 },
       ],
       subscription_data: {
         metadata: { userId, plan },
