@@ -79,6 +79,66 @@ export async function POST(req: Request) {
       }
       break;
     }
+
+    case "invoice.payment_failed": {
+      const invoice = event.data.object as Stripe.Invoice;
+      const subId = invoice.subscription as string;
+      if (subId) {
+        const { prisma } = await import("@/lib/prisma");
+        const match = await prisma.user.findFirst({
+          where: { stripeSubscriptionId: subId },
+        });
+        if (match) {
+          await updateUser(match.id, { subscriptionStatus: "past_due" });
+
+          const founderEmail = process.env.FOUNDER_EMAIL;
+          if (founderEmail && process.env.RESEND_API_KEY) {
+            await resend.emails.send({
+              from:    "ProAnswer <noreply@proanswer.ai>",
+              to:      founderEmail,
+              subject: `⚠️ Payment Failed: ${match.name}`,
+              html: `
+                <h2>Payment Failed</h2>
+                <p><strong>Name:</strong> ${match.name}</p>
+                <p><strong>Email:</strong> ${match.email}</p>
+                <p><strong>Business:</strong> ${match.business}</p>
+                <p>Stripe will retry automatically. If it continues to fail, the subscription will be canceled.</p>
+              `,
+            }).catch(() => {});
+          }
+        }
+      }
+      break;
+    }
+
+    case "charge.refunded": {
+      const charge = event.data.object as Stripe.Charge;
+      const customerId = charge.customer as string;
+      if (customerId) {
+        const { prisma } = await import("@/lib/prisma");
+        const match = await prisma.user.findFirst({
+          where: { stripeCustomerId: customerId },
+        });
+        if (match) {
+          const founderEmail = process.env.FOUNDER_EMAIL;
+          if (founderEmail && process.env.RESEND_API_KEY) {
+            const amountRefunded = (charge.amount_refunded / 100).toFixed(2);
+            await resend.emails.send({
+              from:    "ProAnswer <noreply@proanswer.ai>",
+              to:      founderEmail,
+              subject: `💰 Refund Processed: ${match.name} — $${amountRefunded}`,
+              html: `
+                <h2>Refund Processed</h2>
+                <p><strong>Name:</strong> ${match.name}</p>
+                <p><strong>Email:</strong> ${match.email}</p>
+                <p><strong>Amount Refunded:</strong> $${amountRefunded}</p>
+              `,
+            }).catch(() => {});
+          }
+        }
+      }
+      break;
+    }
   }
 
   return NextResponse.json({ received: true });
