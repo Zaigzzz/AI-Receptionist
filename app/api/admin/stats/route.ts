@@ -53,24 +53,39 @@ export async function GET(req: Request) {
   let calls: AdminCall[] = [];
   let answered = 0, missed = 0, totalSeconds = 0;
 
+  // Fetch calls for all user assistants + the demo assistant
+  const assistantIds = new Set<string>();
+  const demoId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID;
+  if (demoId) assistantIds.add(demoId);
+  for (const u of allUsers) {
+    if (u.vapiAssistantId) assistantIds.add(u.vapiAssistantId);
+  }
+
   try {
-    const res = await fetch(
-      `https://api.vapi.ai/call?assistantId=${ASSISTANT_ID}&limit=100`,
-      { headers: { Authorization: `Bearer ${VAPI_PRIVATE_KEY}`, "Content-Type": "application/json" }, cache: "no-store" }
+    const fetches = [...assistantIds].map((id) =>
+      fetch(`https://api.vapi.ai/call?assistantId=${id}&limit=100`, {
+        headers: { Authorization: `Bearer ${VAPI_PRIVATE_KEY}`, "Content-Type": "application/json" },
+        cache: "no-store",
+      }).then(async (res) => {
+        if (!res.ok) return [];
+        const data = await res.json();
+        const raw: AdminCall[] = Array.isArray(data) ? data : (data.results ?? []);
+        return raw.map((c) => ({
+          id: c.id, status: c.status, endedReason: c.endedReason,
+          startedAt: c.startedAt, endedAt: c.endedAt,
+          durationSeconds: c.durationSeconds, transcript: c.transcript,
+          recordingUrl: c.recordingUrl, type: c.type,
+        }));
+      }).catch(() => [] as AdminCall[])
     );
-    if (res.ok) {
-      const data = await res.json();
-      const raw: AdminCall[] = Array.isArray(data) ? data : (data.results ?? []);
-      calls = raw.map((c) => ({
-        id: c.id, status: c.status, endedReason: c.endedReason,
-        startedAt: c.startedAt, endedAt: c.endedAt,
-        durationSeconds: c.durationSeconds, transcript: c.transcript,
-        recordingUrl: c.recordingUrl, type: c.type,
-      }));
-      answered     = calls.filter((c) => c.durationSeconds && c.durationSeconds > 0).length;
-      missed       = calls.filter((c) => !c.durationSeconds || c.durationSeconds === 0).length;
-      totalSeconds = calls.reduce((sum, c) => sum + (c.durationSeconds ?? 0), 0);
-    }
+
+    const results = await Promise.all(fetches);
+    calls = results.flat().sort((a, b) =>
+      (b.startedAt ?? "").localeCompare(a.startedAt ?? "")
+    );
+    answered     = calls.filter((c) => c.durationSeconds && c.durationSeconds > 0).length;
+    missed       = calls.filter((c) => !c.durationSeconds || c.durationSeconds === 0).length;
+    totalSeconds = calls.reduce((sum, c) => sum + (c.durationSeconds ?? 0), 0);
   } catch { /* Vapi unavailable */ }
 
   return NextResponse.json({ users, calls, answered, missed, totalSeconds });

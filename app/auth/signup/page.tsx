@@ -107,7 +107,7 @@ export default function SignupPage() {
         router.push("/auth/login");
         return;
       }
-      window.location.href = "/";
+      window.location.href = "/dashboard";
     } catch {
       setErrors({ server: "Something went wrong. Please try again." } as { server: string });
       setLoading(false);
@@ -224,7 +224,7 @@ export default function SignupPage() {
 
           <motion.div {...fadeUp(0)}>
             <h1 className="font-display text-3xl font-extrabold text-zinc-900 mb-1 tracking-tight">Create your account</h1>
-            <p className="text-zinc-500 text-sm mb-8">14-day free trial. No credit card required.</p>
+            <p className="text-zinc-500 text-sm mb-8">Get your AI receptionist live in under 24 hours.</p>
           </motion.div>
 
           <motion.form
@@ -326,9 +326,9 @@ export default function SignupPage() {
 
             <motion.p {...fadeUp(0.38)} className="text-center text-xs text-zinc-400 pt-1">
               By creating an account you agree to our{" "}
-              <Link href="#" className="text-zinc-700 hover:underline">Terms</Link>{" "}
+              <Link href="/terms" className="text-zinc-700 hover:underline">Terms</Link>{" "}
               and{" "}
-              <Link href="#" className="text-zinc-700 hover:underline">Privacy Policy</Link>.
+              <Link href="/privacy" className="text-zinc-700 hover:underline">Privacy Policy</Link>.
             </motion.p>
           </motion.form>
 

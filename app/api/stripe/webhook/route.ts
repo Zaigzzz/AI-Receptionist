@@ -40,7 +40,7 @@ export async function POST(req: Request) {
           if (founderEmail && process.env.RESEND_API_KEY) {
             const planLabel = plan === "pro" ? "Pro ($500 + $150/mo)" : "Starter ($300/mo)";
             await resend.emails.send({
-              from:    "ProAnswer <noreply@proanswer.ai>",
+              from:    "ProAnswer <noreply@proanswer.dev>",
               to:      founderEmail,
               subject: `🔔 New Customer: ${customer.name} — ${planLabel}`,
               html: `
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
           const founderEmail = process.env.FOUNDER_EMAIL;
           if (founderEmail && process.env.RESEND_API_KEY) {
             await resend.emails.send({
-              from:    "ProAnswer <noreply@proanswer.ai>",
+              from:    "ProAnswer <noreply@proanswer.dev>",
               to:      founderEmail,
               subject: `⚠️ Payment Failed: ${match.name}`,
               html: `
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
           if (founderEmail && process.env.RESEND_API_KEY) {
             const amountRefunded = (charge.amount_refunded / 100).toFixed(2);
             await resend.emails.send({
-              from:    "ProAnswer <noreply@proanswer.ai>",
+              from:    "ProAnswer <noreply@proanswer.dev>",
               to:      founderEmail,
               subject: `💰 Refund Processed: ${match.name} — $${amountRefunded}`,
               html: `

@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Eye, EyeOff, ArrowRight, Mail, Lock, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const EASE = [0.22, 1, 0.36, 1] as [number, number, number, number];
 const fadeUp = (delay = 0) => ({
@@ -29,11 +29,13 @@ function LogoMark() {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
   const { status } = useSession();
 
   useEffect(() => {
     if (status === "loading") return;
-    if (status === "authenticated") router.replace("/");
+    if (status === "authenticated") router.replace(callbackUrl);
   }, [status, router]);
 
   const [email, setEmail] = useState("");
@@ -68,7 +70,7 @@ export default function LoginPage() {
         setTimeout(() => setShake(false), 500);
         setLoading(false);
       } else {
-        window.location.href = "/";
+        window.location.href = callbackUrl;
       }
     } catch {
       setErrors({ server: "Invalid email or password. Please try again." });
@@ -216,7 +218,7 @@ export default function LoginPage() {
             <motion.div {...fadeUp(0.2)}>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wide">Password</label>
-                <Link href="#" className="text-xs text-zinc-500 font-semibold hover:text-zinc-900 transition-colors">Forgot password?</Link>
+                <Link href="/auth/forgot-password" className="text-xs text-zinc-500 font-semibold hover:text-zinc-900 transition-colors">Forgot password?</Link>
               </div>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />

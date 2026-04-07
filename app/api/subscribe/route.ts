@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
   try {
     await resend.emails.send({
-      from: "ProAnswer <onboarding@resend.dev>",
+      from: "ProAnswer <noreply@proanswer.dev>",
       to: email,
       subject: "You're on the list — ProAnswer",
       html: `
@@ -60,10 +60,10 @@ export async function POST(req: Request) {
                   <tr>
                     <td style="padding:40px 40px 32px;">
                       <h1 style="margin:0 0 16px;font-size:26px;font-weight:800;color:#14532d;line-height:1.3;">
-                        You're on the list! 🎉
+                        You're on the list!
                       </h1>
                       <p style="margin:0 0 16px;font-size:16px;color:#374151;line-height:1.7;">
-                        Hey there — thanks for signing up for ProAnswer's free trial. We're glad you're here.
+                        Hey there — thanks for your interest in ProAnswer. We're glad you're here.
                       </p>
                       <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.7;">
                         We'll be reaching out shortly to get everything set up for you. In the meantime, here's a quick reminder of what you're getting:
@@ -73,14 +73,14 @@ export async function POST(req: Request) {
                       <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;border-radius:12px;padding:4px 0;margin-bottom:28px;">
                         <tr><td style="padding:12px 20px;font-size:15px;color:#15803d;">✅ &nbsp;24/7 AI receptionist — never miss a call</td></tr>
                         <tr><td style="padding:12px 20px;font-size:15px;color:#15803d;">✅ &nbsp;Instant call answering, nights & weekends</td></tr>
-                        <tr><td style="padding:12px 20px;font-size:15px;color:#15803d;">✅ &nbsp;14-day free trial, no credit card needed</td></tr>
+                        <tr><td style="padding:12px 20px;font-size:15px;color:#15803d;">✅ &nbsp;Your AI is live within 24 hours of signup</td></tr>
                       </table>
 
                       <!-- CTA Button -->
                       <table width="100%" cellpadding="0" cellspacing="0">
                         <tr>
                           <td align="center">
-                            <a href="https://proanswer.com" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#22c55e);color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:0.2px;">
+                            <a href="https://proanswer.dev" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#22c55e);color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:0.2px;">
                               Visit ProAnswer →
                             </a>
                           </td>
@@ -111,10 +111,10 @@ export async function POST(req: Request) {
     });
 
     await resend.emails.send({
-      from: "ProAnswer <onboarding@resend.dev>",
+      from: "ProAnswer <noreply@proanswer.dev>",
       to: process.env.FOUNDER_EMAIL ?? process.env.YOUR_EMAIL!,
       subject: `New signup: ${email}`,
-      html: `<p>New free trial signup: <strong>${email}</strong></p>`,
+      html: `<p>New subscriber: <strong>${email}</strong></p>`,
     });
 
     return NextResponse.json({ success: true });
