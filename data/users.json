@@ -1,0 +1,44 @@
+[
+  {
+    "id": "9267eb06-f2ee-4cb0-81a9-8d4256d65390",
+    "username": "NicholasF58840",
+    "createdAt": "2026-04-06T02:54:36.790Z",
+    "name": "Nicholas Fiorentino",
+    "business": "Smith Plumbing co",
+    "email": "nicholasfioren2820@gmail.com",
+    "password": "$2b$12$vP181yRb0o.YFF49wNEMleOhoMvHJ798GuzjFJQ.ItH4RaYueeuki",
+    "profile": {
+      "businessName": "Smith Plumbing Co",
+      "ownerName": "Nicholas Fiorentino",
+      "businessType": "Plumbing",
+      "phone": "6312873283",
+      "city": "Shirley",
+      "state": "NY",
+      "hours": "M-F 8am-5pm",
+      "services": "Drain cleaning ",
+      "firstMessage": "Thanks for calling Smith Plumbing Co! This is Riley. How can I help you today?",
+      "personality": "friendly",
+      "instructions": "Always ask for the caller's name and phone number",
+      "afterHoursMessage": "",
+      "holidayMessage": ""
+    }
+  },
+  {
+    "id": "a78cd019-beba-4369-95f7-3d218598de14",
+    "username": "JayleneR10208",
+    "createdAt": "2026-04-06T02:56:42.691Z",
+    "name": "Jaylene Rendon",
+    "business": "Jaylene Plumbing Co",
+    "email": "jaylenerendon08@gmail.com",
+    "password": "$2b$12$v1M9AeDUiFK97Ib/XWdDZebhmxEN5RNRtCvuMU6ErKOpsjJg4EQce"
+  },
+  {
+    "id": "2ec5f39e-10f8-4727-b0b2-47128d064a69",
+    "username": "TestU25398",
+    "createdAt": "2026-04-06T22:32:55.665Z",
+    "name": "Test User",
+    "business": "Test Biz",
+    "email": "testdebug@test.com",
+    "password": "$2b$12$n5gi3Z3H1U6HsT1Mq4xx.eixL0qp4DrjUyK7unjdCHD.875VFxVYW"
+  }
+]
