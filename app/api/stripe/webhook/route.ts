@@ -82,7 +82,7 @@ export async function POST(req: Request) {
 
     case "invoice.payment_failed": {
       const invoice = event.data.object as Stripe.Invoice;
-      const subId = invoice.subscription as string;
+      const subId = (invoice as unknown as { subscription: string }).subscription;
       if (subId) {
         const { prisma } = await import("@/lib/prisma");
         const match = await prisma.user.findFirst({
