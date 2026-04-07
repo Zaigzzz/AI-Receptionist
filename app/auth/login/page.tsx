@@ -31,17 +31,20 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const authError = searchParams.get("error");
   const { status } = useSession();
 
   useEffect(() => {
     if (status === "loading") return;
     if (status === "authenticated") router.replace(callbackUrl);
-  }, [status, router]);
+  }, [status, router, callbackUrl]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; server?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; server?: string }>(
+    authError ? { server: "Invalid email or password. Please try again." } : {}
+  );
   const [shake, setShake] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -63,16 +66,7 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const res = await signIn("credentials", { email, password, redirect: false, callbackUrl });
-      if (!res?.ok) {
-        setErrors({ server: "Invalid email or password. Please try again." });
-        setShake(true);
-        setTimeout(() => setShake(false), 500);
-        setLoading(false);
-      } else {
-        router.push(callbackUrl);
-        router.refresh();
-      }
+      await signIn("credentials", { email, password, redirectTo: callbackUrl });
     } catch {
       setErrors({ server: "Invalid email or password. Please try again." });
       setShake(true);
