@@ -1,16 +1,21 @@
-import { auth } from "@/auth";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
 const PROTECTED_ROUTES = ["/dashboard", "/onboarding"];
-const PROTECTED_API = ["/api/user/", "/api/vapi/", "/api/stripe/create-checkout"];
+const PROTECTED_API = ["/api/user/", "/api/vapi/", "/api/stripe/create-checkout", "/api/chat"];
 
-export default auth((req) => {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const isProtectedPage = PROTECTED_ROUTES.some((r) => pathname.startsWith(r));
   const isProtectedApi = PROTECTED_API.some((r) => pathname.startsWith(r));
 
-  if ((isProtectedPage || isProtectedApi) && !req.auth) {
+  if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
+
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+
+  if (!token) {
     if (isProtectedApi) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -20,8 +25,8 @@ export default auth((req) => {
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/api/user/:path*", "/api/vapi/:path*", "/api/stripe/create-checkout"],
+  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/api/user/:path*", "/api/vapi/:path*", "/api/stripe/create-checkout", "/api/chat"],
 };
