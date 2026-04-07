@@ -3,7 +3,26 @@ import { NextResponse } from "next/server";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// Simple in-memory rate limiter: max 3 requests per IP per minute
+const rateMap = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateMap.set(ip, { count: 1, resetAt: now + 60_000 });
+    return false;
+  }
+  entry.count++;
+  return entry.count > 3;
+}
+
 export async function POST(req: Request) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (isRateLimited(ip)) {
+    return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+  }
+
   const { email } = await req.json();
 
   if (!email || !email.includes("@")) {
@@ -93,7 +112,7 @@ export async function POST(req: Request) {
 
     await resend.emails.send({
       from: "ProAnswer <onboarding@resend.dev>",
-      to: process.env.YOUR_EMAIL!,
+      to: process.env.FOUNDER_EMAIL ?? process.env.YOUR_EMAIL!,
       subject: `New signup: ${email}`,
       html: `<p>New free trial signup: <strong>${email}</strong></p>`,
     });

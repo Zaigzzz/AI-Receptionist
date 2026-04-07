@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
+import { auth } from "@/auth";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -22,6 +23,11 @@ Available services: Plumbing repairs, drain cleaning, water heater installation,
 Business hours: Monday–Friday 7am–7pm, Saturday 8am–4pm, emergency services available 24/7 for an additional fee.`;
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   try {
     const { messages } = await req.json();
 
