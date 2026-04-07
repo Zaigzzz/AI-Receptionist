@@ -63,14 +63,15 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const res = await signIn("credentials", { email, password, redirect: false });
-      if (res?.error) {
+      const res = await signIn("credentials", { email, password, redirect: false, callbackUrl });
+      if (!res?.ok) {
         setErrors({ server: "Invalid email or password. Please try again." });
         setShake(true);
         setTimeout(() => setShake(false), 500);
         setLoading(false);
       } else {
-        window.location.href = callbackUrl;
+        router.push(callbackUrl);
+        router.refresh();
       }
     } catch {
       setErrors({ server: "Invalid email or password. Please try again." });
