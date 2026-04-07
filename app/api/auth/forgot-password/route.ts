@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { findByEmail } from "@/lib/users";
 import { Resend } from "resend";
 import crypto from "crypto";
+import { emailLayout, emailButton } from "@/lib/email";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -32,13 +33,24 @@ export async function POST(req: Request) {
     from: "ProAnswer <noreply@proanswer.dev>",
     to: user.email,
     subject: "Reset your password — ProAnswer",
-    html: `
-      <h2>Password Reset</h2>
-      <p>Hi ${user.name},</p>
-      <p>We received a request to reset your password. Click the link below to set a new one:</p>
-      <p><a href="${resetUrl}" style="display:inline-block;background:#09090b;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Reset Password</a></p>
-      <p style="color:#666;font-size:14px;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
-    `,
+    html: emailLayout({
+      preheader: "Reset your ProAnswer password",
+      body: `
+        <h1 style="margin:0 0 16px;font-size:26px;font-weight:800;color:#09090b;line-height:1.3;">
+          Reset your password
+        </h1>
+        <p style="margin:0 0 8px;font-size:15px;color:#52525b;line-height:1.7;">
+          Hi ${user.name},
+        </p>
+        <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.7;">
+          We received a request to reset your password. Click the button below to set a new one.
+        </p>
+        ${emailButton("Reset Password", resetUrl)}
+        <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa;line-height:1.6;">
+          This link expires in 1 hour. If you didn't request this, you can safely ignore this email.
+        </p>
+      `,
+    }),
   }).catch(() => {});
 
   return NextResponse.json({ ok: true });

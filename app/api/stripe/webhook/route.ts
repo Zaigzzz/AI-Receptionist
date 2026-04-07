@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { findById, findByEmail, updateUser } from "@/lib/users";
 import { Resend } from "resend";
+import { emailLayout } from "@/lib/email";
 
 const stripe        = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -42,17 +43,23 @@ export async function POST(req: Request) {
             await resend.emails.send({
               from:    "ProAnswer <noreply@proanswer.dev>",
               to:      founderEmail,
-              subject: `🔔 New Customer: ${customer.name} — ${planLabel}`,
-              html: `
-                <h2>New ProAnswer Customer</h2>
-                <p><strong>Name:</strong> ${customer.name}</p>
-                <p><strong>Business:</strong> ${customer.business}</p>
-                <p><strong>Email:</strong> ${customer.email}</p>
-                <p><strong>Plan:</strong> ${planLabel}</p>
-                <p><strong>User ID:</strong> ${customer.id}</p>
-                <hr/>
-                <p>Action required: Set up their Vapi assistant and phone number, then add the IDs in the <a href="${process.env.NEXT_PUBLIC_BASE_URL}/admin">admin panel</a>.</p>
-              `,
+              subject: `New Customer: ${customer.name} — ${planLabel}`,
+              html: emailLayout({
+                preheader: `New customer: ${customer.name} signed up for ${planLabel}`,
+                body: `
+                  <h1 style="margin:0 0 20px;font-size:22px;font-weight:800;color:#09090b;">New Customer</h1>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fafafa;border-radius:12px;border:1px solid #f4f4f5;margin-bottom:24px;">
+                    <tr><td style="padding:14px 20px;border-bottom:1px solid #f4f4f5;font-size:14px;"><span style="color:#a1a1aa;">Name</span><br/><strong style="color:#09090b;">${customer.name}</strong></td></tr>
+                    <tr><td style="padding:14px 20px;border-bottom:1px solid #f4f4f5;font-size:14px;"><span style="color:#a1a1aa;">Business</span><br/><strong style="color:#09090b;">${customer.business}</strong></td></tr>
+                    <tr><td style="padding:14px 20px;border-bottom:1px solid #f4f4f5;font-size:14px;"><span style="color:#a1a1aa;">Email</span><br/><strong style="color:#09090b;">${customer.email}</strong></td></tr>
+                    <tr><td style="padding:14px 20px;border-bottom:1px solid #f4f4f5;font-size:14px;"><span style="color:#a1a1aa;">Plan</span><br/><strong style="color:#09090b;">${planLabel}</strong></td></tr>
+                    <tr><td style="padding:14px 20px;font-size:14px;"><span style="color:#a1a1aa;">User ID</span><br/><span style="color:#71717a;font-family:monospace;font-size:12px;">${customer.id}</span></td></tr>
+                  </table>
+                  <p style="margin:0;font-size:14px;color:#52525b;line-height:1.6;">
+                    <strong>Action required:</strong> Set up their Vapi assistant and phone number, then add the IDs in the <a href="${process.env.NEXT_PUBLIC_BASE_URL}/admin" style="color:#09090b;font-weight:600;text-decoration:underline;">admin panel</a>.
+                  </p>
+                `,
+              }),
             }).catch(() => {});
           }
         }
@@ -96,14 +103,23 @@ export async function POST(req: Request) {
             await resend.emails.send({
               from:    "ProAnswer <noreply@proanswer.dev>",
               to:      founderEmail,
-              subject: `⚠️ Payment Failed: ${match.name}`,
-              html: `
-                <h2>Payment Failed</h2>
-                <p><strong>Name:</strong> ${match.name}</p>
-                <p><strong>Email:</strong> ${match.email}</p>
-                <p><strong>Business:</strong> ${match.business}</p>
-                <p>Stripe will retry automatically. If it continues to fail, the subscription will be canceled.</p>
-              `,
+              subject: `Payment Failed: ${match.name}`,
+              html: emailLayout({
+                preheader: `Payment failed for ${match.name}`,
+                body: `
+                  <div style="background-color:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:16px 20px;margin-bottom:24px;">
+                    <p style="margin:0;font-size:14px;font-weight:700;color:#dc2626;">Payment Failed</p>
+                  </div>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fafafa;border-radius:12px;border:1px solid #f4f4f5;margin-bottom:24px;">
+                    <tr><td style="padding:14px 20px;border-bottom:1px solid #f4f4f5;font-size:14px;"><span style="color:#a1a1aa;">Name</span><br/><strong style="color:#09090b;">${match.name}</strong></td></tr>
+                    <tr><td style="padding:14px 20px;border-bottom:1px solid #f4f4f5;font-size:14px;"><span style="color:#a1a1aa;">Email</span><br/><strong style="color:#09090b;">${match.email}</strong></td></tr>
+                    <tr><td style="padding:14px 20px;font-size:14px;"><span style="color:#a1a1aa;">Business</span><br/><strong style="color:#09090b;">${match.business}</strong></td></tr>
+                  </table>
+                  <p style="margin:0;font-size:14px;color:#52525b;line-height:1.6;">
+                    Stripe will retry automatically. If it continues to fail, the subscription will be canceled.
+                  </p>
+                `,
+              }),
             }).catch(() => {});
           }
         }
@@ -126,13 +142,18 @@ export async function POST(req: Request) {
             await resend.emails.send({
               from:    "ProAnswer <noreply@proanswer.dev>",
               to:      founderEmail,
-              subject: `💰 Refund Processed: ${match.name} — $${amountRefunded}`,
-              html: `
-                <h2>Refund Processed</h2>
-                <p><strong>Name:</strong> ${match.name}</p>
-                <p><strong>Email:</strong> ${match.email}</p>
-                <p><strong>Amount Refunded:</strong> $${amountRefunded}</p>
-              `,
+              subject: `Refund Processed: ${match.name} — $${amountRefunded}`,
+              html: emailLayout({
+                preheader: `Refund of $${amountRefunded} processed for ${match.name}`,
+                body: `
+                  <h1 style="margin:0 0 20px;font-size:22px;font-weight:800;color:#09090b;">Refund Processed</h1>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fafafa;border-radius:12px;border:1px solid #f4f4f5;margin-bottom:24px;">
+                    <tr><td style="padding:14px 20px;border-bottom:1px solid #f4f4f5;font-size:14px;"><span style="color:#a1a1aa;">Name</span><br/><strong style="color:#09090b;">${match.name}</strong></td></tr>
+                    <tr><td style="padding:14px 20px;border-bottom:1px solid #f4f4f5;font-size:14px;"><span style="color:#a1a1aa;">Email</span><br/><strong style="color:#09090b;">${match.email}</strong></td></tr>
+                    <tr><td style="padding:14px 20px;font-size:14px;"><span style="color:#a1a1aa;">Amount Refunded</span><br/><strong style="color:#09090b;font-size:20px;">$${amountRefunded}</strong></td></tr>
+                  </table>
+                `,
+              }),
             }).catch(() => {});
           }
         }
