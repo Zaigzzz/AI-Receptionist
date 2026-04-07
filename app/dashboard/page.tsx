@@ -156,6 +156,9 @@ export default function DashboardPage() {
   const [profileLoaded,    setProfileLoaded]    = useState(false);
   const [hasAssistant,     setHasAssistant]     = useState(false);
   const [hasPhoneNumber,   setHasPhoneNumber]   = useState(false);
+  const [vapiPhoneNumber,  setVapiPhoneNumber]  = useState<string | null>(null);
+  const [customerStatus,   setCustomerStatus]   = useState("pending");
+  const [forwardingSetup,  setForwardingSetup]  = useState(false);
 
   useEffect(() => {
     if (profileLoaded) return;
@@ -169,6 +172,9 @@ export default function DashboardPage() {
         }
         setHasAssistant(!!data.vapiAssistantId);
         setHasPhoneNumber(!!data.vapiPhoneNumberId);
+        setVapiPhoneNumber(data.vapiPhoneNumber ?? null);
+        setCustomerStatus(data.status ?? "pending");
+        setForwardingSetup(data.forwardingSetup ?? false);
         setProfileLoaded(true);
       })
       .catch(() => setProfileLoaded(true));
@@ -640,18 +646,53 @@ export default function DashboardPage() {
             </div>
           </motion.div>
 
-          {/* Connect Phone CTA */}
-          <motion.div {...fade(0.35)} className="bg-[#09090b] rounded-3xl p-5 shadow-lg">
-            <Phone className="w-5 h-5 text-zinc-400 mb-3" />
-            <h3 className="text-white font-bold text-sm mb-1">Connect Your Number</h3>
-            <p className="text-white/40 text-xs leading-relaxed mb-4">
-              Forward your business number to Riley and she starts answering immediately.
-            </p>
-            <Link href="/onboarding"
-              className="block text-center bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs px-4 py-2.5 rounded-xl transition-all">
-              View Setup Guide →
-            </Link>
-          </motion.div>
+          {/* Connect Phone / Forwarding Info */}
+          {vapiPhoneNumber ? (
+            <motion.div {...fade(0.35)} className="bg-[#09090b] rounded-3xl p-5 shadow-lg">
+              <Phone className="w-5 h-5 text-zinc-400 mb-3" />
+              <h3 className="text-white font-bold text-sm mb-1">
+                {forwardingSetup ? "Forwarding Active" : "Forward Your Number"}
+              </h3>
+              {forwardingSetup ? (
+                <p className="text-white/40 text-xs leading-relaxed mb-3">
+                  Calls to your business line are being forwarded to Riley.
+                </p>
+              ) : (
+                <>
+                  <p className="text-white/40 text-xs leading-relaxed mb-3">
+                    Dial the code below from your business phone to forward calls to Riley:
+                  </p>
+                  <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-3 mb-3">
+                    <p className="text-[10px] text-white/40 uppercase tracking-widest mb-1">Dial from your business phone</p>
+                    <p className="text-white font-mono font-bold text-lg tracking-wider">*72{vapiPhoneNumber}</p>
+                  </div>
+                  <p className="text-white/30 text-[10px] leading-relaxed">
+                    To cancel forwarding later, dial <span className="font-mono font-bold">*73</span> from your business phone.
+                  </p>
+                </>
+              )}
+              <div className="mt-3 flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${forwardingSetup ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                <span className={`text-xs font-medium ${forwardingSetup ? "text-emerald-400" : "text-amber-400"}`}>
+                  {forwardingSetup ? "Connected" : "Awaiting setup"}
+                </span>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div {...fade(0.35)} className="bg-[#09090b] rounded-3xl p-5 shadow-lg">
+              <Phone className="w-5 h-5 text-zinc-400 mb-3" />
+              <h3 className="text-white font-bold text-sm mb-1">Connect Your Number</h3>
+              <p className="text-white/40 text-xs leading-relaxed mb-4">
+                {customerStatus === "pending" || customerStatus === "setting_up"
+                  ? "We're setting up your dedicated phone number. You'll see forwarding instructions here once it's ready."
+                  : "Forward your business number to Riley and she starts answering immediately."}
+              </p>
+              <Link href="/onboarding"
+                className="block text-center bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs px-4 py-2.5 rounded-xl transition-all">
+                View Setup Guide →
+              </Link>
+            </motion.div>
+          )}
         </div>
       </div>
     </div>

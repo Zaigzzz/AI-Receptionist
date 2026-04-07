@@ -18,6 +18,12 @@ model User {
   // Per-client Vapi config (set by admin after onboarding)
   vapiAssistantId      String?
   vapiPhoneNumberId    String?
+  vapiPhoneNumber      String?          // The actual phone number string (e.g. +18005551234)
+
+  // Customer lifecycle
+  status               String   @default("pending")  // pending | setting_up | ready | active | paused
+  forwardingSetup      Boolean  @default(false)
+  notes                String?          // Admin notes about this customer
 
   // Stripe
   plan                 String?

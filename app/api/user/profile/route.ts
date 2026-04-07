@@ -16,6 +16,9 @@ export async function GET() {
     name:              user.name,
     vapiAssistantId:   user.vapiAssistantId ?? null,
     vapiPhoneNumberId: user.vapiPhoneNumberId ?? null,
+    vapiPhoneNumber:   user.vapiPhoneNumber ?? null,
+    status:            user.status ?? "pending",
+    forwardingSetup:   user.forwardingSetup ?? false,
   });
 }
 

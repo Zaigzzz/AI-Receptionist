@@ -8,6 +8,7 @@ export interface AdminCall {
   id: string; status: string; endedReason?: string;
   startedAt?: string; endedAt?: string; durationSeconds?: number;
   transcript?: string; recordingUrl?: string; type?: string;
+  assistantId?: string;
 }
 
 export interface AdminStats {
@@ -15,7 +16,8 @@ export interface AdminStats {
     id: string; name: string; username: string; business: string;
     email: string; createdAt: string; plan?: string | null;
     subscriptionStatus?: string | null; vapiAssistantId?: string | null;
-    vapiPhoneNumberId?: string | null;
+    vapiPhoneNumberId?: string | null; vapiPhoneNumber?: string | null;
+    status: string; forwardingSetup: boolean; notes?: string | null;
     profile?: {
       businessName: string; ownerName: string; businessType: string;
       phone: string; city: string; state: string; hours: string;
@@ -74,7 +76,7 @@ export async function GET(req: Request) {
           id: c.id, status: c.status, endedReason: c.endedReason,
           startedAt: c.startedAt, endedAt: c.endedAt,
           durationSeconds: c.durationSeconds, transcript: c.transcript,
-          recordingUrl: c.recordingUrl, type: c.type,
+          recordingUrl: c.recordingUrl, type: c.type, assistantId: id,
         }));
       }).catch(() => [] as AdminCall[])
     );

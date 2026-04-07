@@ -9,6 +9,7 @@ import {
   Menu, Eye, Phone, PhoneMissed, PhoneCall, DollarSign,
   Clock, ChevronDown, ChevronUp, RefreshCw, BarChart2,
   Mic, ArrowUpRight, ArrowDownRight, Calendar, Star,
+  Copy, Check, MessageSquare, Pause, Play, StickyNote,
 } from "lucide-react";
 import type { AdminStats, AdminCall } from "@/app/api/admin/stats/route";
 
@@ -48,6 +49,23 @@ const statusStyle = {
   demo:     { dot: "bg-zinc-500",   badge: "bg-zinc-800 text-zinc-400 border-zinc-700", label: "Demo"     },
   answered: { dot: "bg-emerald-400",badge: "bg-emerald-950 text-emerald-400 border-emerald-900", label: "Answered" },
 };
+
+const customerStatusConfig: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  pending:     { label: "New",        color: "text-blue-400",    bg: "bg-blue-950",    border: "border-blue-900" },
+  setting_up:  { label: "Setting Up", color: "text-amber-400",   bg: "bg-amber-950",   border: "border-amber-900" },
+  ready:       { label: "Ready",      color: "text-purple-400",  bg: "bg-purple-950",  border: "border-purple-900" },
+  active:      { label: "Active",     color: "text-emerald-400", bg: "bg-emerald-950", border: "border-emerald-900" },
+  paused:      { label: "Paused",     color: "text-zinc-400",    bg: "bg-zinc-800",    border: "border-zinc-700" },
+};
+
+function CustomerStatusBadge({ status }: { status: string }) {
+  const cfg = customerStatusConfig[status] ?? customerStatusConfig.pending;
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
+      {cfg.label}
+    </span>
+  );
+}
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -233,7 +251,9 @@ function LockScreen({ onUnlock }: { onUnlock: (data: AdminStats, secret: string)
 
 function OverviewTab({ data }: { data: AdminStats }) {
   const { users, calls, answered, missed, totalSeconds } = data;
-  const mrr = users.length * PLAN_PRICE;
+  const activeUsers = users.filter((u) => u.status === "active");
+  const pendingUsers = users.filter((u) => u.status === "pending");
+  const mrr = activeUsers.length * PLAN_PRICE;
   const answerRate = (answered + missed) > 0 ? Math.round((answered / (answered + missed)) * 100) : 0;
   const avgDuration = answered > 0 ? Math.round(totalSeconds / answered) : 0;
   const recentUsers = [...users].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
@@ -251,7 +271,7 @@ function OverviewTab({ data }: { data: AdminStats }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <StatCard label="Monthly Recurring Revenue" value={`$${mrr.toLocaleString()}`} icon={DollarSign} delay={0.05} trend={{ dir: "up", text: "This month" }} />
         <StatCard label="Annual Run Rate" value={`$${(mrr * 12).toLocaleString()}`} icon={TrendingUp} delay={0.1} />
-        <StatCard label="Total Customers" value={users.length} icon={Users} delay={0.15} sub={`${users.length} active`} />
+        <StatCard label="Total Customers" value={users.length} icon={Users} delay={0.15} sub={`${activeUsers.length} active${pendingUsers.length > 0 ? ` · ${pendingUsers.length} new` : ""}`} />
         <StatCard label="Total Calls Handled" value={calls.length} icon={Phone} delay={0.2} trend={{ dir: "up", text: `${answered} answered` }} />
       </div>
 
@@ -283,7 +303,10 @@ function OverviewTab({ data }: { data: AdminStats }) {
                     <p className="text-white text-sm font-medium truncate">{u.name}</p>
                     <p className="text-zinc-500 text-xs truncate">{u.business}</p>
                   </div>
-                  <p className="text-zinc-600 text-xs flex-shrink-0">{fmtShortDate(u.createdAt)}</p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <CustomerStatusBadge status={u.status} />
+                    <p className="text-zinc-600 text-xs">{fmtShortDate(u.createdAt)}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -380,7 +403,7 @@ function GrowthTab({ data }: { data: AdminStats }) {
 
 function RevenueTab({ data }: { data: AdminStats }) {
   const { users } = data;
-  const mrr = users.length * PLAN_PRICE;
+  const mrr = users.filter((u) => u.status === "active").length * PLAN_PRICE;
   const arr = mrr * 12;
   const ltv = PLAN_PRICE * 12; // assuming 12-month avg lifetime (placeholder)
 
@@ -458,17 +481,35 @@ function RevenueTab({ data }: { data: AdminStats }) {
 // ─── Slide-over ───────────────────────────────────────────────────────────────
 
 function SlideOver({
-  user, onClose, onSaved,
+  user, calls, onClose, onSaved,
 }: {
   user: AdminStats["users"][0];
+  calls: AdminCall[];
   onClose: () => void;
   onSaved: (updated: AdminStats["users"][0]) => void;
 }) {
   const [vapiAssistantId, setVapiAssistantId] = useState(user.vapiAssistantId ?? "");
   const [vapiPhoneNumberId, setVapiPhoneNumberId] = useState(user.vapiPhoneNumberId ?? "");
+  const [vapiPhoneNumber, setVapiPhoneNumber] = useState(user.vapiPhoneNumber ?? "");
+  const [status, setStatus] = useState(user.status ?? "pending");
+  const [forwardingSetup, setForwardingSetup] = useState(user.forwardingSetup ?? false);
+  const [notes, setNotes] = useState(user.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
+  const [copied, setCopied] = useState("");
+
+  // Per-customer call stats
+  const customerCalls = calls.filter((c) => c.assistantId === user.vapiAssistantId);
+  const customerAnswered = customerCalls.filter((c) => c.durationSeconds && c.durationSeconds > 0).length;
+  const customerMissed = customerCalls.filter((c) => !c.durationSeconds || c.durationSeconds === 0).length;
+  const customerSeconds = customerCalls.reduce((s, c) => s + (c.durationSeconds ?? 0), 0);
+
+  function copyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(""), 1500);
+  }
 
   async function handleSave() {
     setSaving(true); setErr(""); setSaved(false);
@@ -476,7 +517,14 @@ function SlideOver({
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vapiAssistantId: vapiAssistantId.trim(), vapiPhoneNumberId: vapiPhoneNumberId.trim() }),
+        body: JSON.stringify({
+          vapiAssistantId: vapiAssistantId.trim(),
+          vapiPhoneNumberId: vapiPhoneNumberId.trim(),
+          vapiPhoneNumber: vapiPhoneNumber.trim(),
+          status,
+          forwardingSetup,
+          notes: notes.trim(),
+        }),
       });
       if (!res.ok) throw new Error("Save failed");
       const { user: updated } = await res.json();
@@ -491,6 +539,7 @@ function SlideOver({
   }
 
   const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 text-xs font-mono placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors";
+  const selectCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 transition-colors appearance-none";
 
   return (
     <>
@@ -498,7 +547,7 @@ function SlideOver({
         className="fixed inset-0 bg-black/60 z-40" onClick={onClose} />
       <motion.div key="panel" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed right-0 top-0 h-full w-full max-w-sm bg-zinc-900 border-l border-zinc-800 z-50 overflow-y-auto">
+        className="fixed right-0 top-0 h-full w-full max-w-md bg-zinc-900 border-l border-zinc-800 z-50 overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-white font-bold text-lg">Customer Details</h2>
@@ -508,26 +557,75 @@ function SlideOver({
             </button>
           </div>
 
-          <div className="w-14 h-14 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-white font-bold text-xl mb-6">
-            {user.name.charAt(0)}
+          {/* Header with avatar + status */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+              {user.name.charAt(0)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold text-lg truncate">{user.name}</p>
+              <p className="text-zinc-500 text-sm truncate">{user.business || "No business name"}</p>
+            </div>
+            <CustomerStatusBadge status={status} />
           </div>
 
+          {/* Call stats for this customer */}
+          {user.vapiAssistantId && (
+            <div className="grid grid-cols-4 gap-2 mb-6">
+              {[
+                { label: "Calls", value: customerCalls.length, icon: Phone },
+                { label: "Answered", value: customerAnswered, icon: PhoneCall },
+                { label: "Missed", value: customerMissed, icon: PhoneMissed },
+                { label: "Minutes", value: Math.round(customerSeconds / 60), icon: Clock },
+              ].map(({ label, value, icon: Icon }) => (
+                <div key={label} className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3 text-center">
+                  <Icon className="w-3.5 h-3.5 text-zinc-500 mx-auto mb-1" />
+                  <p className="text-white font-bold text-lg leading-none">{value}</p>
+                  <p className="text-zinc-600 text-[10px] mt-0.5">{label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Read-only info */}
-          <div className="space-y-4 mb-8">
+          <div className="space-y-3 mb-6">
             {[
-              { label: "Full Name",  value: user.name },
-              { label: "Business",   value: user.business || "—" },
-              { label: "Email",      value: user.email },
-              { label: "Username",   value: user.username },
-              { label: "Joined",     value: fmtDate(user.createdAt) },
-              { label: "Plan",       value: user.plan ?? "none" },
-              { label: "User ID",    value: user.id, mono: true },
-            ].map(({ label, value, mono }) => (
-              <div key={label} className="border-b border-zinc-800 pb-4 last:border-0">
-                <p className="text-zinc-500 text-xs uppercase tracking-wider mb-1">{label}</p>
-                <p className={`text-white text-sm break-all ${mono ? "font-mono text-xs text-zinc-400" : "font-medium"}`}>{value}</p>
+              { label: "Email", value: user.email },
+              { label: "Username", value: user.username },
+              { label: "Joined", value: fmtDate(user.createdAt) },
+              { label: "Plan", value: user.plan ?? "none" },
+              { label: "Subscription", value: user.subscriptionStatus ?? "none" },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex items-center justify-between border-b border-zinc-800/50 pb-3 last:border-0">
+                <p className="text-zinc-500 text-xs">{label}</p>
+                <p className="text-zinc-200 text-sm font-medium">{value}</p>
               </div>
             ))}
+          </div>
+
+          {/* Customer Status & Forwarding */}
+          <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 space-y-4 mb-4">
+            <p className="text-zinc-400 text-xs font-bold uppercase tracking-widest">Customer Status</p>
+            <div>
+              <label className="text-zinc-500 text-xs mb-1.5 block">Status</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectCls}>
+                <option value="pending">New (Pending)</option>
+                <option value="setting_up">Setting Up</option>
+                <option value="ready">Ready (Awaiting Forwarding)</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+              </select>
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-zinc-500 text-xs">Call Forwarding Set Up</label>
+              <button
+                onClick={() => setForwardingSetup(!forwardingSetup)}
+                suppressHydrationWarning
+                className={`relative w-10 h-5 rounded-full transition-colors ${forwardingSetup ? "bg-emerald-500" : "bg-zinc-700"}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${forwardingSetup ? "translate-x-5" : "translate-x-0.5"}`} />
+              </button>
+            </div>
           </div>
 
           {/* Riley configuration — what the client filled in */}
@@ -561,7 +659,7 @@ function SlideOver({
           )}
 
           {/* Vapi config — editable */}
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 space-y-4">
+          <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 space-y-4 mb-4">
             <p className="text-zinc-400 text-xs font-bold uppercase tracking-widest">Vapi Configuration</p>
             <div>
               <label className="text-zinc-500 text-xs mb-1.5 block">Assistant ID</label>
@@ -573,12 +671,38 @@ function SlideOver({
               <input suppressHydrationWarning value={vapiPhoneNumberId} onChange={(e) => setVapiPhoneNumberId(e.target.value)}
                 placeholder="e.g. ed57c052-6ec5-..." className={inputCls} />
             </div>
-            {err && <p className="text-red-400 text-xs">{err}</p>}
-            <button onClick={handleSave} disabled={saving} suppressHydrationWarning
-              className="w-full py-2 rounded-lg bg-white hover:bg-zinc-100 text-zinc-900 text-sm font-bold transition-colors disabled:opacity-50">
-              {saving ? "Saving…" : saved ? "✓ Saved!" : "Save Vapi Config"}
-            </button>
+            <div>
+              <label className="text-zinc-500 text-xs mb-1.5 block">Phone Number (shown to customer)</label>
+              <div className="flex gap-2">
+                <input suppressHydrationWarning value={vapiPhoneNumber} onChange={(e) => setVapiPhoneNumber(e.target.value)}
+                  placeholder="e.g. +18005551234" className={inputCls} />
+                {vapiPhoneNumber && (
+                  <button onClick={() => copyToClipboard(vapiPhoneNumber, "phone")} suppressHydrationWarning
+                    className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-700 hover:bg-zinc-600 transition-colors">
+                    {copied === "phone" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-zinc-400" />}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* Admin Notes */}
+          <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 space-y-3 mb-4">
+            <div className="flex items-center gap-2">
+              <StickyNote className="w-3.5 h-3.5 text-zinc-500" />
+              <p className="text-zinc-400 text-xs font-bold uppercase tracking-widest">Admin Notes</p>
+            </div>
+            <textarea suppressHydrationWarning value={notes} onChange={(e) => setNotes(e.target.value)}
+              placeholder="Internal notes about this customer..."
+              rows={3}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 text-xs placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors resize-none" />
+          </div>
+
+          {err && <p className="text-red-400 text-xs mb-3">{err}</p>}
+          <button onClick={handleSave} disabled={saving} suppressHydrationWarning
+            className="w-full py-3 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 text-sm font-bold transition-colors disabled:opacity-50">
+            {saving ? "Saving…" : saved ? "Saved!" : "Save All Changes"}
+          </button>
         </div>
       </motion.div>
     </>
@@ -587,20 +711,51 @@ function SlideOver({
 
 // ─── Users Tab ────────────────────────────────────────────────────────────────
 
-function UsersTab({ users }: { users: AdminStats["users"] }) {
+function UsersTab({ users, calls }: { users: AdminStats["users"]; calls: AdminCall[] }) {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selected, setSelected] = useState<AdminStats["users"][0] | null>(null);
 
   const filtered = users.filter((u) => {
     const q = search.toLowerCase();
-    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) ||
+    const matchesSearch = u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) ||
       u.business.toLowerCase().includes(q) || u.username.toLowerCase().includes(q);
+    const matchesStatus = statusFilter === "all" || u.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
+
+  // Count by status
+  const statusCounts = users.reduce<Record<string, number>>((acc, u) => {
+    acc[u.status] = (acc[u.status] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <motion.div key="users" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
       <div className="mb-6">
         <h1 className="text-white font-bold text-2xl mb-4">Customers</h1>
+
+        {/* Status filter pills */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {[
+            { key: "all", label: "All", count: users.length },
+            { key: "pending", label: "New", count: statusCounts.pending ?? 0 },
+            { key: "setting_up", label: "Setting Up", count: statusCounts.setting_up ?? 0 },
+            { key: "ready", label: "Ready", count: statusCounts.ready ?? 0 },
+            { key: "active", label: "Active", count: statusCounts.active ?? 0 },
+            { key: "paused", label: "Paused", count: statusCounts.paused ?? 0 },
+          ].map((f) => (
+            <button key={f.key} onClick={() => setStatusFilter(f.key)} suppressHydrationWarning
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                statusFilter === f.key
+                  ? "bg-white text-zinc-900 border-white"
+                  : "bg-zinc-900 text-zinc-400 border-zinc-700 hover:border-zinc-500"
+              }`}>
+              {f.label} {f.count > 0 && <span className="ml-1 opacity-60">{f.count}</span>}
+            </button>
+          ))}
+        </div>
+
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -613,27 +768,35 @@ function UsersTab({ users }: { users: AdminStats["users"] }) {
       </div>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-[1fr_1fr_1fr_1fr_80px] gap-4 px-5 py-3 bg-zinc-800 text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-          <span>Name</span><span>Business</span><span>Email</span><span>Joined</span><span></span>
+        <div className="grid grid-cols-[1fr_1fr_100px_90px_80px] gap-4 px-5 py-3 bg-zinc-800 text-zinc-400 text-xs font-semibold uppercase tracking-wider">
+          <span>Name</span><span>Business</span><span>Status</span><span>Forwarding</span><span></span>
         </div>
         {filtered.length === 0 ? (
-          <div className="py-16 text-center text-zinc-600 text-sm">No results for &ldquo;{search}&rdquo;</div>
+          <div className="py-16 text-center text-zinc-600 text-sm">
+            {search ? <>No results for &ldquo;{search}&rdquo;</> : "No customers in this category."}
+          </div>
         ) : (
           filtered.map((user, i) => (
             <motion.div key={user.id}
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] }}
-              className={`grid grid-cols-[1fr_1fr_1fr_1fr_80px] gap-4 px-5 py-3.5 border-t border-zinc-800 items-center hover:bg-zinc-800/50 transition-colors ${i % 2 === 0 ? "" : "bg-zinc-950/30"}`}>
+              className={`grid grid-cols-[1fr_1fr_100px_90px_80px] gap-4 px-5 py-3.5 border-t border-zinc-800 items-center hover:bg-zinc-800/50 transition-colors cursor-pointer ${i % 2 === 0 ? "" : "bg-zinc-950/30"}`}
+              onClick={() => setSelected(user)}>
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                   {user.name.charAt(0)}
                 </div>
-                <span className="text-white text-sm font-medium truncate">{user.name}</span>
+                <div className="min-w-0">
+                  <span className="text-white text-sm font-medium truncate block">{user.name}</span>
+                  <span className="text-zinc-600 text-xs truncate block">{user.email}</span>
+                </div>
               </div>
               <span className="text-zinc-400 text-sm truncate">{user.business || "—"}</span>
-              <span className="text-zinc-500 text-sm truncate">{user.email}</span>
-              <span className="text-zinc-600 text-xs">{fmtShortDate(user.createdAt)}</span>
-              <button onClick={() => setSelected(user)} suppressHydrationWarning
+              <CustomerStatusBadge status={user.status} />
+              <span className={`text-xs font-medium ${user.forwardingSetup ? "text-emerald-400" : "text-zinc-600"}`}>
+                {user.forwardingSetup ? "Active" : "Not set"}
+              </span>
+              <button onClick={(e) => { e.stopPropagation(); setSelected(user); }} suppressHydrationWarning
                 className="flex items-center gap-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
                 <Eye className="w-3 h-3" />View
               </button>
@@ -645,7 +808,7 @@ function UsersTab({ users }: { users: AdminStats["users"] }) {
       {/* Slide-over */}
       <AnimatePresence>
         {selected && (
-          <SlideOver user={selected} onClose={() => setSelected(null)} onSaved={(updated) => setSelected(updated)} />
+          <SlideOver user={selected} calls={calls} onClose={() => setSelected(null)} onSaved={(updated) => setSelected(updated)} />
         )}
       </AnimatePresence>
     </motion.div>
@@ -907,7 +1070,7 @@ function AdminShell({ data, onLogout }: { data: AdminStats; onLogout: () => void
             {tab === "overview" && <OverviewTab key="overview" data={liveData} />}
             {tab === "growth"   && <GrowthTab   key="growth"   data={liveData} />}
             {tab === "revenue"  && <RevenueTab  key="revenue"  data={liveData} />}
-            {tab === "users"    && <UsersTab     key="users"    users={liveData.users} />}
+            {tab === "users"    && <UsersTab     key="users"    users={liveData.users} calls={liveData.calls} />}
             {tab === "calls"    && <CallsTab     key="calls"    data={liveData} />}
             {tab === "activity" && <ActivityTab  key="activity" data={liveData} />}
           </AnimatePresence>

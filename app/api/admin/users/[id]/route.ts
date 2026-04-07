@@ -21,10 +21,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = await findById(id);
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const allowed = ["vapiAssistantId", "vapiPhoneNumberId", "plan"] as const;
-  const data: Partial<Record<typeof allowed[number], string>> = {};
-  for (const field of allowed) {
+  const stringFields = ["vapiAssistantId", "vapiPhoneNumberId", "vapiPhoneNumber", "plan", "status", "notes"] as const;
+  const boolFields = ["forwardingSetup"] as const;
+  const data: Record<string, string | boolean> = {};
+  for (const field of stringFields) {
     if (field in body) data[field] = body[field];
+  }
+  for (const field of boolFields) {
+    if (field in body) data[field] = Boolean(body[field]);
   }
 
   const updated = await updateUser(id, data);
