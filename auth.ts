@@ -1,10 +1,16 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { findByEmail } from "@/lib/users";
+import Google from "next-auth/providers/google";
+import { findByEmail, createUser } from "@/lib/users";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
@@ -20,9 +26,34 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async signIn({ user, account }) {
+      if (account?.provider === "google" && user.email) {
+        const existing = await findByEmail(user.email);
+        if (!existing) {
+          // Auto-create account for Google sign-in users
+          const randomPassword = crypto.randomBytes(32).toString("hex");
+          const hashed = await bcrypt.hash(randomPassword, 12);
+          await createUser({
+            name: user.name ?? "User",
+            business: "",
+            email: user.email,
+            password: hashed,
+          });
+        }
+      }
+      return true;
+    },
+    async jwt({ token, user, account }) {
       if (user) {
         token.username = (user as { username?: string }).username ?? token.name;
+      }
+      // For Google users, fetch username from DB
+      if (account?.provider === "google" && token.email) {
+        const dbUser = await findByEmail(token.email);
+        if (dbUser) {
+          token.sub = dbUser.id;
+          token.username = dbUser.username;
+        }
       }
       return token;
     },
