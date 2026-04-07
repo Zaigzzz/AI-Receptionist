@@ -13,7 +13,16 @@ export async function middleware(req: NextRequest) {
 
   if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
 
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+  // NextAuth v5 uses AUTH_SECRET; getToken needs it passed explicitly
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
+  // In production over HTTPS, NextAuth v5 uses __Secure-authjs.session-token
+  const secureCookie = req.nextUrl.protocol === "https:";
+  const cookieName = secureCookie
+    ? "__Secure-authjs.session-token"
+    : "authjs.session-token";
+
+  const token = await getToken({ req, secret, cookieName });
 
   if (!token) {
     if (isProtectedApi) {
