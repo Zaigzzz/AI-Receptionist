@@ -33,4 +33,27 @@ model User {
 
   // Dashboard profile (stored as JSON)
   profile              Json?
+
+  bookings             Booking[]
+}
+
+model Booking {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+
+  callerName      String?
+  callerPhone     String?
+  callerAddress   String?
+  serviceNeeded   String?
+  preferredTime   String?
+  notes           String?
+  summary         String?          // AI-generated call summary
+
+  source          String   @default("call")   // "tool_call" | "transcript" | "manual"
+  vapiCallId      String?  @unique
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
 }

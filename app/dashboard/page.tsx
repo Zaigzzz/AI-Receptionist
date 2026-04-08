@@ -8,7 +8,7 @@ import {
   Building2, User, MapPin, Clock, Wrench, Sparkles, Save,
   CheckCircle2, Circle, ChevronDown, Bell, Zap, RefreshCw,
   Mic, AlertCircle, ChevronRight, Timer, MessageSquare,
-  Smile, Wand2, Info,
+  Smile, Wand2, Info, Users, CalendarCheck, PhoneForwarded,
 } from "lucide-react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
@@ -45,6 +45,7 @@ const INSTRUCTION_CHIPS = [
 
 const NAV = [
   { label: "Dashboard", icon: LayoutDashboard },
+  { label: "Leads",     icon: Users },
   { label: "Call Logs",  icon: PhoneCall },
   { label: "Settings",  icon: Settings },
 ];
@@ -823,6 +824,160 @@ export default function DashboardPage() {
     </div>
   );
 
+  // ── Leads Tab ─────────────────────────────────────────────────────────
+  interface BookingData {
+    id: string;
+    callerName: string | null;
+    callerPhone: string | null;
+    callerAddress: string | null;
+    serviceNeeded: string | null;
+    preferredTime: string | null;
+    notes: string | null;
+    summary: string | null;
+    source: string;
+    createdAt: string;
+  }
+
+  const [bookings, setBookings] = useState<BookingData[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
+  const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
+
+  const fetchBookings = useCallback(async () => {
+    setBookingsLoading(true);
+    try {
+      const res = await fetch("/api/user/bookings");
+      if (res.ok) {
+        const data = await res.json();
+        setBookings(data.bookings ?? []);
+      }
+    } finally {
+      setBookingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchBookings(); }, [fetchBookings]);
+
+  const LeadsTab = () => (
+    <div className="space-y-5">
+      <motion.div {...fade(0)} className="flex items-center justify-between">
+        <div>
+          <h2 className="font-display text-2xl font-extrabold text-zinc-900 tracking-tight">Leads</h2>
+          <p className="text-zinc-500 text-sm mt-0.5">All leads captured by Riley from your calls</p>
+        </div>
+        <button onClick={fetchBookings}
+          className="flex items-center gap-2 text-sm font-semibold text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 px-4 py-2 rounded-xl transition-all shadow-sm">
+          <RefreshCw className={`w-4 h-4 ${bookingsLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+      </motion.div>
+
+      {/* Summary strip */}
+      <motion.div {...fade(0.05)} className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Total Leads", value: bookings.length, icon: Users, iconCls: "text-zinc-700", bgCls: "bg-zinc-100" },
+          { label: "From Calls", value: bookings.filter(b => b.source === "tool_call").length, icon: PhoneForwarded, iconCls: "text-zinc-700", bgCls: "bg-zinc-100" },
+          { label: "From Transcripts", value: bookings.filter(b => b.source === "transcript").length, icon: MessageSquare, iconCls: "text-zinc-700", bgCls: "bg-zinc-100" },
+        ].map((s) => (
+          <div key={s.label} className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-2 ${s.bgCls}`}>
+              <s.icon className={`w-4 h-4 ${s.iconCls}`} />
+            </div>
+            <p className="font-display text-xl font-extrabold text-zinc-900">{s.value}</p>
+            <p className="text-[11px] text-zinc-500 font-medium">{s.label}</p>
+          </div>
+        ))}
+      </motion.div>
+
+      {/* Leads list */}
+      <motion.div {...fade(0.1)} className="bg-white rounded-3xl border border-zinc-100 shadow-sm overflow-hidden">
+        {bookingsLoading ? (
+          <div className="py-16 text-center">
+            <RefreshCw className="w-6 h-6 text-zinc-300 mx-auto mb-3 animate-spin" />
+            <p className="text-zinc-400 text-sm">Loading leads...</p>
+          </div>
+        ) : bookings.length === 0 ? (
+          <div className="py-16 text-center px-6">
+            <Users className="w-10 h-10 text-zinc-200 mx-auto mb-4" />
+            <h3 className="font-bold text-zinc-900 text-base mb-1">No leads yet</h3>
+            <p className="text-zinc-500 text-sm max-w-sm mx-auto">
+              When Riley captures caller information during calls, their details will appear here automatically.
+            </p>
+          </div>
+        ) : (
+          <div>
+            {/* Header */}
+            <div className="grid grid-cols-[1fr_120px_1fr_100px] gap-4 px-5 py-3 bg-zinc-50 border-b border-zinc-100 text-zinc-500 text-xs font-semibold uppercase tracking-wider">
+              <span>Caller</span><span>Phone</span><span>Service</span><span>Date</span>
+            </div>
+            {bookings.map((b, i) => (
+              <div key={b.id} className={`border-b border-zinc-50 last:border-0 ${i % 2 === 1 ? "bg-zinc-50/50" : ""}`}>
+                <div
+                  className="grid grid-cols-[1fr_120px_1fr_100px] gap-4 px-5 py-3.5 items-center hover:bg-zinc-50 transition-colors cursor-pointer"
+                  onClick={() => setExpandedBooking(expandedBooking === b.id ? null : b.id)}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-700 text-xs font-bold flex-shrink-0">
+                      {(b.callerName ?? "?")[0]?.toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-zinc-900 text-sm font-semibold truncate">{b.callerName || "Unknown"}</p>
+                      {b.callerAddress && <p className="text-zinc-400 text-xs truncate">{b.callerAddress}</p>}
+                    </div>
+                  </div>
+                  <span className="text-zinc-700 text-sm font-mono">{b.callerPhone || "—"}</span>
+                  <span className="text-zinc-600 text-sm truncate">{b.serviceNeeded || "—"}</span>
+                  <span className="text-zinc-400 text-xs">{new Date(b.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                </div>
+
+                <AnimatePresence>
+                  {expandedBooking === b.id && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-5 pb-4 pt-1 space-y-3">
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {[
+                            { label: "Full Name", value: b.callerName },
+                            { label: "Phone", value: b.callerPhone },
+                            { label: "Address", value: b.callerAddress },
+                            { label: "Service Needed", value: b.serviceNeeded },
+                            { label: "Preferred Time", value: b.preferredTime },
+                            { label: "Source", value: b.source === "tool_call" ? "Booked during call" : "Extracted from transcript" },
+                          ].filter(f => f.value).map(({ label, value }) => (
+                            <div key={label} className="bg-zinc-50 rounded-xl px-3 py-2.5 border border-zinc-100">
+                              <p className="text-zinc-400 text-[10px] uppercase tracking-wider mb-0.5">{label}</p>
+                              <p className="text-zinc-900 text-sm font-medium">{value}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {b.summary && (
+                          <div className="bg-zinc-50 rounded-xl px-4 py-3 border border-zinc-100">
+                            <p className="text-zinc-400 text-[10px] uppercase tracking-wider mb-1">Call Summary</p>
+                            <p className="text-zinc-700 text-sm leading-relaxed">{b.summary}</p>
+                          </div>
+                        )}
+                        {b.notes && (
+                          <div className="bg-zinc-50 rounded-xl px-4 py-3 border border-zinc-100">
+                            <p className="text-zinc-400 text-[10px] uppercase tracking-wider mb-1">Notes</p>
+                            <p className="text-zinc-700 text-sm leading-relaxed">{b.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+
   // ── Settings Tab ──────────────────────────────────────────────────────
   const SettingsTab = () => (
     <motion.div {...fade(0)} className="bg-white rounded-3xl border border-zinc-100 shadow-sm p-8 max-w-lg">
@@ -901,6 +1056,7 @@ export default function DashboardPage() {
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 max-w-5xl w-full mx-auto">
           <AnimatePresence mode="wait">
             {activeNav === "Dashboard" && <motion.div key="dash" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>{DashboardTab()}</motion.div>}
+            {activeNav === "Leads"      && <motion.div key="leads" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>{LeadsTab()}</motion.div>}
             {activeNav === "Call Logs"  && <motion.div key="logs" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>{CallLogsTab()}</motion.div>}
             {activeNav === "Settings"   && <motion.div key="sets" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>{SettingsTab()}</motion.div>}
           </AnimatePresence>

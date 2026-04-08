@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
 const PROTECTED_ROUTES = ["/dashboard", "/onboarding"];
+const PUBLIC_API = ["/api/vapi/webhook"];
 const PROTECTED_API = ["/api/user/", "/api/vapi/", "/api/stripe/create-checkout", "/api/chat"];
 
 export async function middleware(req: NextRequest) {
@@ -11,6 +12,8 @@ export async function middleware(req: NextRequest) {
   const isProtectedPage = PROTECTED_ROUTES.some((r) => pathname.startsWith(r));
   const isProtectedApi = PROTECTED_API.some((r) => pathname.startsWith(r));
 
+  const isPublicApi = PUBLIC_API.some((r) => pathname.startsWith(r));
+  if (isPublicApi) return NextResponse.next();
   if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
 
   // NextAuth v5 uses AUTH_SECRET; getToken needs it passed explicitly
