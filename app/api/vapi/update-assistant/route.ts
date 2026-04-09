@@ -81,7 +81,10 @@ export async function POST(req: Request) {
 
   const systemPrompt = buildSystemPrompt(profile);
 
-  const defaultGreeting = `Thanks for calling ${profile.businessName || "us"}! This is Riley. How can I help you today?`;
+  const bizName = profile.businessName?.trim();
+  const defaultGreeting = bizName
+    ? `Thanks for calling ${bizName}! This is Riley. How can I help you today?`
+    : "Thanks for calling! This is Riley, your AI receptionist. How can I help you today?";
   const firstMessage = profile.firstMessage?.trim() || defaultGreeting;
 
   const res = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {

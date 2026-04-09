@@ -203,6 +203,13 @@ export default function DashboardPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaveError("");
+
+    // Require business name before pushing to Vapi
+    if (hasAssistant && !profile.businessName.trim()) {
+      setSaveError("Business name is required before Riley can go live.");
+      return;
+    }
+
     try {
       // Save profile locally first
       const localRes = await fetch("/api/user/profile", {

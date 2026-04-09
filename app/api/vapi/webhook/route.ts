@@ -88,6 +88,16 @@ async function handleToolCall(body: Record<string, unknown>) {
 
   const callId = call?.id as string | undefined;
 
+  // Idempotency: skip if we already captured this call
+  if (callId) {
+    const existing = await prisma.booking.findUnique({ where: { vapiCallId: callId } });
+    if (existing) {
+      return NextResponse.json({
+        result: "Appointment already booked. Is there anything else I can help with?",
+      });
+    }
+  }
+
   // Create the booking
   await prisma.booking.create({
     data: {
@@ -145,20 +155,38 @@ async function handleEndOfCall(body: Record<string, unknown>) {
   // Only process calls that actually had a conversation (> 10 seconds)
   if (durationSeconds < 10) return;
 
-  // Try to extract caller info from the transcript/summary
-  const extracted = extractCallerInfo(transcript, summary);
+  // 1. Try Vapi's structured data first (analysis, structuredData)
+  const analysis = (message.analysis as Record<string, unknown>) ?? {};
+  const structuredData = (analysis.structuredData as Record<string, string>) ?? {};
 
-  // Only create a booking if we found at least a name or phone
-  if (extracted.callerName || extracted.callerPhone) {
+  // 2. Get caller's phone from Vapi call metadata (the number they called from)
+  const customer = call?.customer as Record<string, string> | undefined;
+  const callerPhoneFromMeta = customer?.number || null;
+
+  // 3. Regex extraction as fallback
+  const regexExtracted = extractCallerInfo(transcript, summary);
+
+  // Merge: prefer structured data > call metadata > regex
+  const callerName = structuredData.callerName || structuredData.name || regexExtracted.callerName;
+  const callerPhone = structuredData.callerPhone || structuredData.phone || callerPhoneFromMeta || regexExtracted.callerPhone;
+  const callerAddress = structuredData.callerAddress || structuredData.address || regexExtracted.callerAddress;
+  const serviceNeeded = structuredData.serviceNeeded || structuredData.service || regexExtracted.serviceNeeded;
+  const preferredTime = structuredData.preferredTime || structuredData.time || regexExtracted.preferredTime;
+
+  // Use Vapi's summary if available, fall back to analysis summary
+  const callSummary = summary || (analysis.summary as string) || null;
+
+  // Create a booking if we found at least a name or phone number
+  if (callerName || callerPhone) {
     await prisma.booking.create({
       data: {
         userId: user.id,
-        callerName: extracted.callerName,
-        callerPhone: extracted.callerPhone,
-        callerAddress: extracted.callerAddress,
-        serviceNeeded: extracted.serviceNeeded,
-        preferredTime: extracted.preferredTime,
-        summary: summary || null,
+        callerName: callerName || null,
+        callerPhone: callerPhone || null,
+        callerAddress: callerAddress || null,
+        serviceNeeded: serviceNeeded || null,
+        preferredTime: preferredTime || null,
+        summary: callSummary,
         source: "transcript",
         vapiCallId: callId || null,
       },
@@ -166,70 +194,80 @@ async function handleEndOfCall(body: Record<string, unknown>) {
 
     // Send email notification
     await sendBookingEmail(user, {
-      callerName: extracted.callerName || "Unknown caller",
-      callerPhone: extracted.callerPhone || "Not captured",
-      callerAddress: extracted.callerAddress || undefined,
-      serviceNeeded: extracted.serviceNeeded || "Not specified",
-      preferredTime: extracted.preferredTime || undefined,
-      notes: summary || undefined,
+      callerName: callerName || "Unknown caller",
+      callerPhone: callerPhone || "Not captured",
+      callerAddress: callerAddress || undefined,
+      serviceNeeded: serviceNeeded || "Not specified",
+      preferredTime: preferredTime || undefined,
+      notes: callSummary || undefined,
     });
   }
 }
 
-// ─── Extract caller info from transcript using simple pattern matching ──────
+// ─── Extract caller info from transcript using pattern matching (fallback) ──
 
 function extractCallerInfo(transcript: string, summary: string) {
-  const text = `${transcript}\n${summary}`.toLowerCase();
+  const text = `${transcript}\n${summary}`;
 
-  // Phone number patterns
+  // Phone number — standard digit patterns
   const phoneMatch = text.match(/(?:\+?1[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/);
-  const callerPhone = phoneMatch ? phoneMatch[0].replace(/\D/g, "").replace(/^1/, "+1") : null;
+  const callerPhone = phoneMatch ? phoneMatch[0].replace(/\D/g, "").replace(/^(\d{10})$/, "+1$1") : null;
 
-  // Name — look for patterns like "my name is X", "this is X", "I'm X"
+  // Name — multiple patterns, exclude "Riley" and common false positives
   let callerName: string | null = null;
+  const excludeNames = new Set(["riley", "hello", "hi", "hey", "yes", "no", "okay", "sure", "well", "so", "the"]);
   const namePatterns = [
-    /my name is ([a-z]+(?: [a-z]+)?)/i,
-    /this is ([a-z]+(?: [a-z]+)?)/i,
-    /i'm ([a-z]+(?: [a-z]+)?)/i,
-    /name:?\s*([a-z]+(?: [a-z]+)?)/i,
+    /(?:my name is|name's|i'm|i am|this is|it's|call me)\s+([a-z]+(?:\s+[a-z]+)?)/gi,
+    /(?:name|caller)[\s:]+([a-z]+(?:\s+[a-z]+)?)/gi,
   ];
   for (const pattern of namePatterns) {
-    const match = transcript.match(pattern);
-    if (match?.[1] && match[1].length > 2 && match[1].toLowerCase() !== "riley") {
-      callerName = match[1].split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-      break;
+    const matches = [...transcript.matchAll(pattern)];
+    for (const match of matches) {
+      const name = match[1]?.trim();
+      if (name && name.length > 1 && !excludeNames.has(name.toLowerCase())) {
+        callerName = name.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+        break;
+      }
     }
+    if (callerName) break;
   }
 
-  // Address — look for street number patterns
-  const addressMatch = transcript.match(/(\d+\s+[a-z]+(?:\s+[a-z]+)*\s+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|way|court|ct|circle|place|pl))/i);
+  // Address — street patterns
+  const addressMatch = transcript.match(/(\d+\s+[a-z]+(?:\s+[a-z]+)*\s+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|way|court|ct|circle|place|pl|terrace|ter))/i);
   const callerAddress = addressMatch?.[1] || null;
 
-  // Service — from summary usually
+  // Service — from summary (more reliable) or transcript
   let serviceNeeded: string | null = null;
-  const servicePatterns = [
-    /(?:need|want|looking for|requesting|about|for)\s+(?:a\s+)?([a-z]+(?:\s+[a-z]+){0,4}(?:\s+(?:repair|service|installation|replacement|inspection|fix|maintenance|cleaning|estimate)))/i,
-    /(?:leaky?|broken|clogged|no)\s+([a-z]+(?:\s+[a-z]+){0,3})/i,
-  ];
-  for (const pattern of servicePatterns) {
-    const match = (summary || transcript).match(pattern);
-    if (match?.[1]) {
-      serviceNeeded = match[1].charAt(0).toUpperCase() + match[1].slice(1);
-      break;
+  // Use the summary directly if it's short enough — it usually describes the service
+  if (summary && summary.length < 200) {
+    serviceNeeded = summary;
+  } else {
+    const servicePatterns = [
+      /(?:need|want|looking for|requesting|calling about|help with|issue with)\s+(?:a\s+)?(.{5,60}?)(?:\.|,|$)/i,
+      /(?:leaky?|broken|clogged|no|isn't|not)\s+(.{3,40}?)(?:\.|,|$)/i,
+    ];
+    for (const pattern of servicePatterns) {
+      const match = (summary || transcript).match(pattern);
+      if (match?.[1]) {
+        serviceNeeded = match[1].trim();
+        serviceNeeded = serviceNeeded.charAt(0).toUpperCase() + serviceNeeded.slice(1);
+        break;
+      }
     }
   }
 
-  // Time/scheduling
+  // Time/scheduling — broader patterns
   let preferredTime: string | null = null;
   const timePatterns = [
-    /(?:schedule|book|appointment|come out|available)\s+(?:for\s+)?(?:on\s+)?([a-z]+day(?:\s+(?:morning|afternoon|evening))?)/i,
-    /(?:schedule|book|appointment|come out|available)\s+(?:for\s+)?(?:on\s+)?(tomorrow(?:\s+(?:morning|afternoon|evening))?)/i,
-    /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+(?:morning|afternoon|evening))?/i,
+    /(?:schedule|book|appointment|come out|available|come by|set up)\s+(?:for\s+)?(?:on\s+)?(.{3,30}?)(?:\.|,|$|\?)/i,
+    /(today|tomorrow|tonight|this (?:morning|afternoon|evening|week)|next (?:week|monday|tuesday|wednesday|thursday|friday|saturday|sunday))/i,
+    /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+(?:morning|afternoon|evening|at\s+\d+))?/i,
   ];
   for (const pattern of timePatterns) {
     const match = (summary || transcript).match(pattern);
     if (match?.[1]) {
-      preferredTime = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+      preferredTime = match[1].trim();
+      preferredTime = preferredTime.charAt(0).toUpperCase() + preferredTime.slice(1);
       break;
     }
   }
